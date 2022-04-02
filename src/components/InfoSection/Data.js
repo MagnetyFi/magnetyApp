@@ -1,0 +1,33 @@
+export const homeObjOne = {
+    id: 'about',
+    lightBg: false,
+    lightText: true,
+    lightTextDesc: true,
+    topLine: 'Premium Bank',
+    headline: 'Unlimited transactions with zero fees',
+    description: 'blablablblreg r eg a gr r re r.',
+    buttonLabel: 'Get started',
+    imgStart: false,
+    img: require('../../images/svg-1.svg').default,
+    alt: 'Car',
+    dark: true,
+    primary: true,
+    darkText: false,
+};
+
+export const homeObjTwo = {
+    id: 'discover',
+    lightBg: true,
+    lightText: false,
+    lightTextDesc: false,
+    topLine: 'Two',
+    headline: 'bengoze ie ne pz pezg ',
+    description: 'blablablblreg r eg a gr r re r.',
+    buttonLabel: 'Get started',
+    imgStart: true,
+    img: require('../../images/svg-2.svg').default,
+    alt: 'Car',
+    dark: true,
+    primary: true,
+    darkText: false,
+};
