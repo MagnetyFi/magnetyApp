@@ -2,6 +2,9 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin
 from starkware.cairo.common.uint256 import Uint256
+from starkware.starknet.common.syscalls import (
+    get_block_number,
+)
 
 from openzeppelin.token.erc721.library import (
     ERC721_name,
@@ -17,6 +20,7 @@ from openzeppelin.token.erc721.library import (
     ERC721_setApprovalForAll,
     ERC721_only_token_owner,
     ERC721_setTokenURI
+
 )
 
 from openzeppelin.token.erc721_enumerable.library import (
@@ -42,7 +46,7 @@ from openzeppelin.access.ownable import (
 #
 
 @storage_var
-func ERC721_sharesAmount(token_id: Uint256) -> (sharesAmount: Uint256):
+func ERC721_sharesBalance(token_id: Uint256) -> (sharesAmount: Uint256):
 end
 
 @storage_var
@@ -50,16 +54,14 @@ func ERC721_sharePricePurchased(token_id: Uint256) -> (sharePricePurchased: Uint
 end
 
 @storage_var
-func ERC721_sharesTotalSupply(token_id: Uint256) -> (sharePricePurchased: Uint256):
+func ERC721_sharesTotalSupply() -> (sharesTotalSupply: Uint256):
 end
 
 @storage_var
 func ERC721_mintedBlock(token_id: Uint256) -> (mintedBlock: felt):
 end
 
-@storage_var
-func ERC721_baseTokenURI() -> (baseTokenURI: felt):
-end
+
 
 
 #
@@ -75,12 +77,12 @@ func constructor{
         name: felt,
         symbol: felt,
         owner: felt,
-        
+        basetokenURI: felt,
     ):
     ERC721_initializer(name, symbol)
     ERC721_Enumerable_initializer()
     Ownable_initializer(owner)
-
+    ERC721_baseTokenURI.write(basetokenURI)
     return ()
 end
 
@@ -96,6 +98,16 @@ func totalSupply{
     }() -> (totalSupply: Uint256):
     let (totalSupply: Uint256) = ERC721_Enumerable_totalSupply()
     return (totalSupply)
+end
+
+@view
+func sharesTotalSupply{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }() -> (sharesTotalSupply: Uint256):
+    let (sharesTotalSupply: Uint256) = ERC721_sharesTotalSupply()
+    return (sharesTotalSupply)
 end
 
 @view
@@ -158,6 +170,7 @@ func balanceOf{
     return (balance)
 end
 
+
 @view
 func ownerOf{
         syscall_ptr : felt*, 
@@ -187,6 +200,27 @@ func isApprovedForAll{
     let (isApproved: felt) = ERC721_isApprovedForAll(owner, operator)
     return (isApproved)
 end
+
+@view
+func sharesBalance{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(tokenId: felt) -> (sharesBalance: Uint256):
+    let (sharesBalance: Uint256) = ERC721_sharesBalance(owner)
+    return (sharesBalance)
+end
+
+@view
+func mintedBlock{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*, 
+        range_check_ptr
+    }(tokenId: Uint256) -> (mintedBlock: felt):
+    let (mintedBlock: felt) = ERC721_mintedBlock(tokenId)
+    return (mintedBlock)
+end
+
 
 @view
 func tokenURI{
@@ -257,9 +291,16 @@ func mint{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
-    }(to: felt, tokenId: Uint256):
+    }(to: felt, tokenId: Uint256, sharesAmount: Uint256, sharePricePurchased:Uint256):
     Ownable_only_owner()
     ERC721_Enumerable_mint(to, tokenId)
+    ERC721_sharesBalance.write(tokenId, sharesAmount)
+    ERC721_sharePricePurchased.write(tokenId, sharePricePurchased)
+    let (block_number) = get_block_number()
+    ERC721_mintedBlock.write(block_number)
+    let (supply: Uint256) = ERC721_sharesTotalSupply.read()
+    let (new_supply: Uint256) = uint256_checked_add(supply, Uint256(sharesAmount, 0))
+    ERC721_sharesTotalSupply.write(new_supply)
     return ()
 end
 
@@ -269,18 +310,10 @@ func burn{
         syscall_ptr: felt*, 
         range_check_ptr
     }(tokenId: Uint256):
-    ERC721_only_token_owner(tokenId)
-    ERC721_Enumerable_burn(tokenId)
-    return ()
-end
-
-@external
-func setTokenURI{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(tokenId: Uint256, tokenURI: felt):
     Ownable_only_owner()
-    ERC721_setTokenURI(tokenId, tokenURI)
+    ERC721_Enumerable_burn(tokenId)
+    let (supply:Uint256) = ERC721_sharesTotalSupply.read()
+    let (shares:felt) = 
+    let (new_supply:Uint256) = ERC721_sharesTotalSupply.write(supply + )
     return ()
 end
