@@ -18,7 +18,6 @@ from openzeppelin.token.erc721.library import (
     ERC721_ownerOf,
     ERC721_getApproved,
     ERC721_isApprovedForAll,
-    ERC721_tokenURI,
 
     ERC721_initializer,
     ERC721_approve, 
@@ -75,7 +74,7 @@ end
 #
 
 @constructor
-func constructor{
+func initializer{
         syscall_ptr : felt*, 
         pedersen_ptr : HashBuiltin*,
         range_check_ptr
@@ -283,7 +282,7 @@ func setApprovalForAll{
 end
 
 @external
-func transferFrom{
+func setApprovalForAll{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
