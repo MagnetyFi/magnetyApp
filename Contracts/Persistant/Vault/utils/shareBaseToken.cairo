@@ -1,9 +1,14 @@
 %lang starknet
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin
-from starkware.cairo.common.uint256 import Uint256
+from starkware.cairo.common.uint256 import Uint256, uint256_check
 from starkware.starknet.common.syscalls import (
     get_block_number,
+)
+
+from starkware.cairo.common.math import (
+    assert_le,
+    assert_not_zero
 )
 
 from openzeppelin.token.erc721.library import (
@@ -20,6 +25,7 @@ from openzeppelin.token.erc721.library import (
     ERC721_setApprovalForAll,
     ERC721_only_token_owner,
     ERC721_setTokenURI
+    _exists
 
 )
 
@@ -206,9 +212,31 @@ func sharesBalance{
         syscall_ptr : felt*, 
         pedersen_ptr : HashBuiltin*,
         range_check_ptr
-    }(tokenId: felt) -> (sharesBalance: Uint256):
-    let (sharesBalance: Uint256) = ERC721_sharesBalance(owner)
+    }(tokenId: Uint256) -> (sharesBalance: Uint256):
+
+    let (exists) = _exists(token_id)
+    with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
+        assert exists = TRUE
+    end
+
+    let (sharesBalance: Uint256) = ERC721_sharesBalance.read(tokenId)
     return (sharesBalance)
+end
+
+@view
+func sharePricePurchased{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*, 
+        range_check_ptr
+    }(tokenId: Uint256) -> (sharePricePurchased: Uint256):
+
+    let (exists) = _exists(token_id)
+    with_attr error_message("ERC721_Metadata: sharePricePurchased query for nonexistent token"):
+        assert exists = TRUE
+    end
+
+    let (sharePricePurchased: Uint256) = ERC721_sharePricePurchased.read(tokenId)
+    return (sharePricePurchased)
 end
 
 @view
@@ -217,20 +245,18 @@ func mintedBlock{
         pedersen_ptr: HashBuiltin*, 
         range_check_ptr
     }(tokenId: Uint256) -> (mintedBlock: felt):
-    let (mintedBlock: felt) = ERC721_mintedBlock(tokenId)
+
+    let (exists) = _exists(token_id)
+    with_attr error_message("ERC721_Metadata: mintedBlock query for nonexistent token"):
+        assert exists = TRUE
+    end
+
+    let (mintedBlock: felt) = ERC721_mintedBlock.read(tokenId)
     return (mintedBlock)
 end
 
 
-@view
-func tokenURI{
-        syscall_ptr: felt*, 
-        pedersen_ptr: HashBuiltin*, 
-        range_check_ptr
-    }(tokenId: Uint256) -> (tokenURI: felt):
-    let (tokenURI: felt) = ERC721_tokenURI(tokenId)
-    return (tokenURI)
-end
+
 
 #
 # Externals
@@ -294,13 +320,17 @@ func mint{
     }(to: felt, tokenId: Uint256, sharesAmount: Uint256, sharePricePurchased:Uint256):
     Ownable_only_owner()
     ERC721_Enumerable_mint(to, tokenId)
+
+    #set metadata 
     ERC721_sharesBalance.write(tokenId, sharesAmount)
     ERC721_sharePricePurchased.write(tokenId, sharePricePurchased)
     let (block_number) = get_block_number()
-    ERC721_mintedBlock.write(block_number)
+    ERC721_mintedBlock.write(tokenId, block_number)
+
+    #set the new supply
     let (supply: Uint256) = ERC721_sharesTotalSupply.read()
     let (new_supply: Uint256) = uint256_checked_add(supply, Uint256(sharesAmount, 0))
-    ERC721_sharesTotalSupply.write(new_supply)
+    ERC721_sharesTotalSupply.write(tokenId, new_supply)
     return ()
 end
 
@@ -311,9 +341,54 @@ func burn{
         range_check_ptr
     }(tokenId: Uint256):
     Ownable_only_owner()
-    ERC721_Enumerable_burn(tokenId)
+
+    uint256_check(token_id)
+    let (exists) = _exists(token_id)
+    with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
+        assert exists = TRUE
+    end
+
+    #set the token id balance to 0
+    ERC721_sharesBalance.write(tokenId, Uint256(0,0))
+
+    #set the new shares supply
     let (supply:Uint256) = ERC721_sharesTotalSupply.read()
-    let (shares:felt) = 
-    let (new_supply:Uint256) = ERC721_sharesTotalSupply.write(supply + )
+    let (shares:Uint256) = ERC721_sharesBalance.read(tokenId)
+    let (new_supply:Uint256) = uint256_checked_add(supply, shares)
+    ERC721_sharesTotalSupply.write(new_supply)
+
+    #burn erc721
+    ERC721_Enumerable_burn(tokenId)
+
     return ()
 end
+
+@external
+func subShares{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(tokenId: Uint256, sharesToSub:Uint256):
+    Ownable_only_owner()
+
+    uint256_check(token_id)
+    uint256_check(sharesToSub)
+
+    let (exists) = _exists(token_id)
+    with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
+        assert exists = TRUE
+    end
+
+    assert_not_zero(sharesToSub)
+    let (shares: Uint256) = ERC721_sharesBalance.read(token_id)
+    assert_le(sharesToSub, shares)
+
+    let (new_shares) = uint256_checked_sub_le(shares, sharesToSub)
+    ERC721_sharesBalance.write(token_id, new_shares)
+
+    return ()
+end
+
+
+
+
