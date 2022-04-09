@@ -23,7 +23,6 @@ from openzeppelin.token.erc721.library import (
     ERC721_approve, 
     ERC721_setApprovalForAll,
     ERC721_only_token_owner,
-    ERC721_setTokenURI
     _exists
 
 )
@@ -73,8 +72,7 @@ end
 # Constructor
 #
 
-@constructor
-func initializer{
+func initialize{
         syscall_ptr : felt*, 
         pedersen_ptr : HashBuiltin*,
         range_check_ptr
@@ -82,12 +80,10 @@ func initializer{
         name: felt,
         symbol: felt,
         owner: felt,
-        basetokenURI: felt,
     ):
     ERC721_initializer(name, symbol)
     ERC721_Enumerable_initializer()
     Ownable_initializer(owner)
-    ERC721_baseTokenURI.write(basetokenURI)
     return ()
 end
 
