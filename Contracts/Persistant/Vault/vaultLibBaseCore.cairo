@@ -12,7 +12,7 @@ from starkware.cairo.common.bool import (
 )
 
 from magnety.persistant.vault.utils.shareBaseToken import (
-
+    #getters
     totalSupply,
     sharesTotalSupply,
     tokenByIndex,
@@ -28,6 +28,7 @@ from magnety.persistant.vault.utils.shareBaseToken import (
     sharePricePurchased,
     mintedBlock,
 
+    #externals
     initializer
     approve
     setApprovalForAll
@@ -56,8 +57,6 @@ end
 @event
 func VaultLibSet(prevVaultLib: felt, nextVaultLib: felt):
 end
-
-
 
 
 #

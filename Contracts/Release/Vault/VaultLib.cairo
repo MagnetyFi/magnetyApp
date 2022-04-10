@@ -11,6 +11,55 @@ from starkware.cairo.common.bool import (
     FALSE,
 )
 
+from magnety.persistant.vault.vaultLibBaseCore import (
+
+    #NFT Shares getters
+    totalSupply,
+    sharesTotalSupply,
+    tokenByIndex,
+    tokenOfOwnerByIndex,
+    supportsInterface,
+    name,
+    symbol,
+    balanceOf,
+    ownerOf,
+    getApproved,
+    isApprovedForAll,
+    sharesBalance,
+    sharePricePurchased,
+    mintedBlock,
+
+    #NFT Shares externals
+    approve
+    setApprovalForAll
+    safeTransferFrom
+    mint
+    burn
+    subShares
+
+    #init
+    init
+
+    #basic storage
+    comptrolleur,
+    migrator,
+    owner,
+    vaultLib,
+    creator,
+    trackedAssets,
+    assetToIsTracked,
+    accountToIsAssetManager,
+    externalPositionToIsActive,
+    activeExternalPositions,
+    nominatedOwner,
+    
+
+    __setComptrolleur
+    __setMigrator
+    __setOwner
+    __setVaultLib
+)
+
 #
 # Events
 #
