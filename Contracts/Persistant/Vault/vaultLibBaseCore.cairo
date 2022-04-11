@@ -29,6 +29,8 @@ from magnety.persistant.vault.utils.shareBaseToken import (
     mintedBlock,
 
     #externals
+    _setName
+    _setSymbol
     initializer
     approve
     setApprovalForAll

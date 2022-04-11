@@ -258,6 +258,26 @@ end
 #
 
 @external
+func _setName{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(_name:felt):
+    ERC721_name.write(_name)
+    return ()
+end
+
+@external
+func _setSymbol{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(_symbol:felt):
+    ERC721_symbol.write(_symbol)
+    return ()
+end
+
+@external
 func approve{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
