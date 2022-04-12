@@ -254,10 +254,10 @@ end
 
 
 #
-# Externals
+# Internal
 #
 
-@external
+
 func _setName{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -267,7 +267,7 @@ func _setName{
     return ()
 end
 
-@external
+
 func _setSymbol{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -277,7 +277,7 @@ func _setSymbol{
     return ()
 end
 
-@external
+
 func approve{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -287,7 +287,7 @@ func approve{
     return ()
 end
 
-@external
+
 func setApprovalForAll{
         syscall_ptr: felt*, 
         pedersen_ptr: HashBuiltin*, 
@@ -297,7 +297,7 @@ func setApprovalForAll{
     return ()
 end
 
-@external
+
 func setApprovalForAll{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -311,7 +311,7 @@ func setApprovalForAll{
     return ()
 end
 
-@external
+
 func safeTransferFrom{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -327,7 +327,7 @@ func safeTransferFrom{
     return ()
 end
 
-@external
+
 func mint{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -349,7 +349,7 @@ func mint{
     return ()
 end
 
-@external
+
 func burn{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -378,7 +378,6 @@ func burn{
     return ()
 end
 
-@external
 func subShares{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -394,12 +393,24 @@ func subShares{
         assert exists = TRUE
     end
 
-    assert_not_zero(sharesToSub)
+    with_attr error_message("ERC721_Metadata: can not sub zero shares"):
+        assert_not_zero(sharesToSub)
+    end
+
     let (shares: Uint256) = ERC721_sharesBalance.read(token_id)
-    assert_le(sharesToSub, shares)
+
+    with_attr error_message("ERC721_Metadata: can not sub more than available shares"):
+        assert_le(sharesToSub, shares)
+    end
+
 
     let (new_shares) = uint256_checked_sub_le(shares, sharesToSub)
     ERC721_sharesBalance.write(token_id, new_shares)
+
+    #set the new shares supply
+    let (supply:Uint256) = ERC721_sharesTotalSupply.read()
+    let (new_supply:Uint256) = uint256_checked_sub_le(supply, sharesToSub)
+    ERC721_sharesTotalSupply.write(new_supply)
 
     return ()
 end

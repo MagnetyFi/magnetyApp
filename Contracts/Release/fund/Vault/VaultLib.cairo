@@ -7,6 +7,14 @@ from starkware.cairo.common.math import (
     assert_not_equal,
 )
 
+from openzeppelin.token.erc20.interfaces.IERC20 import (
+    balanceOf,
+    allowance,
+    transfer,
+    transferFrom,
+    approve,
+)
+
 from starkware.cairo.common.find_element import (
     find_element,
 )
@@ -128,7 +136,7 @@ func externalPositionManager() -> (externalPositionManagerAddress: felt):
 end
 
 @storage_var
-func positionLimit() -> (positionLimitAmount: felt):
+func positionLimit() -> (positionLimitAmount: Uint256):
 end
 
 @storage_var
@@ -136,7 +144,7 @@ func trackedAssetsLength() -> (length: felt):
 end
 
 @storage_var
-func activeExternalPositionsLength() -> (length: felt):
+func activeExternalPositionsLength() -> (length: Uint256):
 end
 
 
@@ -205,9 +213,18 @@ func getPositionsLimit{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
         range_check_ptr
-    }() -> (positionLimit_: felt):
-    let (positionLimit_:felt) = positionLimit.read()
+    }() -> (positionLimit_: Uint256):
+    let (positionLimit_:Uint256) = positionLimit.read()
     return positionLimit_
+end
+
+func getAssetBalance{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_asset: felt) -> (assetBalance_: Uint256):
+    let (assetBalance_:Uint256) = IERC20.balanceOf(contract_address=_asset)
+    return assetBalance_
 end
 
 
@@ -226,10 +243,11 @@ func vaultLibInitializer{
         _comptrolleur: felt,
         _owner: felt,
         _externalPositionManager: felt,
-        _positionLimitAmount: felt,
+        _positionLimitAmount: Uint256,
     ):
     init(_owner, _comptrolleur, _fundName, _symbol);
     externalPositionManager.write(_externalPositionManager)
+    uint256_check(_positionLimitAmount)
     positionLimitAmount.write(_positionLimitAmount)
     return ()
 end
@@ -243,8 +261,11 @@ func onlyVaultComptrolleur{
         syscall_ptr: felt*, 
         range_check_ptr
     }():
+    let(_comptrolleur) = comptrolleur.read()
+    let(_caller) = get_caller_address()
+
     with_attr error_message("onlyVaultOwner: only callable by the VaultOwner"):
-       assert (get_caller_address - comptrolleur) == 0
+       assert (_comptrolleur() - _caller) == 0
     end
     return ()
 end
@@ -349,6 +370,16 @@ func setNominatedOwner{
     return ()
 end
 
+func setMigrator{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(_nextMigrator: felt):
+    onlyVaultComptrolleur()
+    __setMigrator(_nextMigrator)
+    return ()
+end
+
 func removeNominatedOwner{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -399,9 +430,67 @@ func addTrackedAsset{
         _asset: felt, 
     ):
     onlyVaultComptrolleur()
-    
+    __addTrackedAsset(_asset)
     return ()
 end
+
+
+func burnShares{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _amount: Uint256,
+        _tokenId:felt,
+    ):
+    let(_comptrolleur:felt) = comptrolleur.read()
+    let(_caller:felt) = get_caller_address()
+    let(_shareowner:felt)  = ownerOf(_tokenId)
+
+    with_attr error_message("burnShares: approve caller is not owner nor approved for all"):
+        assert (_comptrolleur - _caller) * (_shareowner - _caller) == 0
+    end
+
+    let(_sharesAmount:felt) = sharesBalance(_tokenId)
+
+    if _sharesAmount == _amount:
+        burn(token_id)
+        return ()
+    else:
+        subShares(_tokenId, _amount)
+        return ()
+    end
+end
+
+func mintShares{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _amount: Uint256,
+        _newSharesholder:felt,
+        _sharePricePurchased:Uint256,
+    ):
+    onlyVaultComptrolleur()
+    let (_tokenId:Uint256) = totalSupply()
+   mint(_newSharesholder, _tokenId, _amount, _sharePricePurchased)
+end
+
+func withdrawAssetTo{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _asset: felt,
+        _target:felt,
+        _amount:Uint256,
+    ):
+    onlyVaultComptrolleur()
+    __withdrawAssetTo(_asset, _target, _amount)
+end
+
+
+
 
 
 
@@ -419,11 +508,16 @@ func __addTrackedAsset{
     with_attr error_message("__addTrackedAsset: asset already tracked"):
         assert isTrackedAsset_ == FALSE
     end
-    assetToIsTracked[_asset] = TRUE
-    trackedAssets[trackedAssetsLength].write(_asset)
-    let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
-    trackedAssetsLength.write(currentTrackedAssetsLength + 1)
+    __validatePositionsLimit()
 
+    assetToIsTracked.write(_asset,TRUE)
+    let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
+    alloc_locals
+    let(trackedAssets_:felt*) = trackedAssets.read()
+    trackedAssets_[currentTrackedAssetsLength] = _asset
+    trackedAssets.write(trackedAssets_)
+    let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
+    trackedAssetsLength.write(newTrackedAssetsLength)
     TrackedAssetAdded.emit(_asset)
 end
 
@@ -444,12 +538,31 @@ func __validatePositionsLimit{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
         range_check_ptr
-    }(_asset: felt) -> (externalPositionManager_: felt):
+    }():
 
-    let (positionLimit_:felt) = getPositionsLimit()
+    let (positionLimit_:Uint256) = getPositionsLimit()
+    let (trackedAssetsLength_:Uint256) = trackedAssetsLength.read()
+    let (activeExternalPositionsLength_:Uint256) = activeExternalPositionsLength.read()
     with_attr error_message("__validatePositionsLimit: Limit exceeded"):
-        assert trackedAssetsLength + activeExternalPositionsLength < positionLimit_
+        assert_le(trackedAssetsLength_ + activeExternalPositionsLength_, positionLimit_)
+    end
+    return ()
+end
+
+func __withdrawAssetTo{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(
+        _asset: felt,
+        _target:felt,
+        _amount:Uint256,
+    ):
+    let (_success:felt) = IERC20(_asset).transfer(_target, _amount)
+    with_attr error_message("__withdrawAssetTo: transfer didn't work"):
+        assert_not_zero(_success)
     end
 
+    AssetWithdrawn.emit(_asset, _target, _amount)
     return ()
 end
