@@ -498,28 +498,99 @@ end
 # internal
 #
 
-func __addTrackedAsset{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }(_asset: felt) -> (externalPositionManager_: felt):
 
-    let (isTrackedAsset_:felt) = isTrackedAsset()
-    with_attr error_message("__addTrackedAsset: asset already tracked"):
-        assert isTrackedAsset_ == FALSE
-    end
-    __validatePositionsLimit()
+## see array manipulation
+# func __addTrackedAsset{
+#         syscall_ptr: felt*,
+#         pedersen_ptr: HashBuiltin*,
+#         range_check_ptr
+#     }(_asset: felt) -> (externalPositionManager_: felt):
 
-    assetToIsTracked.write(_asset,TRUE)
-    let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
-    alloc_locals
-    let(trackedAssets_:felt*) = trackedAssets.read()
-    trackedAssets_[currentTrackedAssetsLength] = _asset
-    trackedAssets.write(trackedAssets_)
-    let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
-    trackedAssetsLength.write(newTrackedAssetsLength)
-    TrackedAssetAdded.emit(_asset)
-end
+#     let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
+#     with_attr error_message("__addTrackedAsset: asset already tracked"):
+#         assert isTrackedAsset_ == FALSE
+#     end
+#     __validatePositionsLimit()
+
+#     assetToIsTracked.write(_asset,TRUE)
+#     let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
+#     alloc_locals
+#     let(trackedAssets_:felt*) = trackedAssets.read()
+#     trackedAssets_[currentTrackedAssetsLength] = _asset
+#     trackedAssets.write(trackedAssets_)
+#     let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
+#     trackedAssetsLength.write(newTrackedAssetsLength)
+#     TrackedAssetAdded.emit(_asset)
+# end
+
+# func __removeTrackedAsset{
+#         syscall_ptr: felt*,
+#         pedersen_ptr: HashBuiltin*,
+#         range_check_ptr
+#     }(_asset: felt) -> (externalPositionManager_: felt):
+
+#     let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
+#     with_attr error_message("__removeTrackedAsset: asset not tracked"):
+#         assert isTrackedAsset_ == TRUE
+#     end
+
+#     assetToIsTracked.write(_asset,TRUE)
+#     let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
+#     alloc_locals
+#     let(trackedAssets_:felt*) = trackedAssets.read()
+#     trackedAssets_[currentTrackedAssetsLength] = _asset
+#     trackedAssets.write(trackedAssets_)
+#     let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
+#     trackedAssetsLength.write(newTrackedAssetsLength)
+#     TrackedAssetRemoved.emit(_asset)
+# end
+
+# func __addExternalPosition{
+#         syscall_ptr: felt*,
+#         pedersen_ptr: HashBuiltin*,
+#         range_check_ptr
+#     }(_externalPosition: felt):
+#     let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+
+#     with_attr error_message("__addExternalPosition: externalPosition already active"):
+#         assert isActiveExternalPosition_ == FALSE
+#     end
+#     __validatePositionsLimit()
+
+#     externalPositionToIsActive.write(_externalPosition,TRUE)
+#     let (currentActiveExternalPositionsLength:felt) = activeExternalPositionsLength.read() 
+#     alloc_locals
+#     let(activeExternalPositions_:felt*) = activeExternalPositions.read()
+#     activeExternalPositions_[currentActiveExternalPositionsLength] = _externalPosition
+#     activeExternalPositions.write(activeExternalPositions_)
+#     let (newActiveExternalPositionsLength:felt) = uint256_checked_add(currentActiveExternalPositionsLength, Uint256(1,0))
+#     activeExternalPositionsLength.write(newActiveExternalPositionsLength)
+#     ExternalPositionAdded.emit(_asset)
+# end
+
+# func __removeExternalPosition{
+#         syscall_ptr: felt*,
+#         pedersen_ptr: HashBuiltin*,
+#         range_check_ptr
+#     }(_externalPosition: felt):
+#     let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+
+#     with_attr error_message("__removeExternalPosition: externalPosition not active"):
+#         assert isActiveExternalPosition_ == TRUE
+#     end
+
+#     externalPositionToIsActive.write(_externalPosition,TRUE)
+#     let (currentActiveExternalPositionsLength:felt) = activeExternalPositionsLength.read() 
+#     alloc_locals
+#     let(activeExternalPositions_:felt*) = activeExternalPositions.read()
+#     activeExternalPositions_[currentActiveExternalPositionsLength] = _externalPosition
+#     activeExternalPositions.write(activeExternalPositions_)
+#     let (newActiveExternalPositionsLength:felt) = uint256_checked_add(currentActiveExternalPositionsLength, Uint256(1,0))
+#     activeExternalPositionsLength.write(newActiveExternalPositionsLength)
+#     ExternalPositionRemoved.emit(_externalPosition)
+# end
+
+
 
 func __approveAssetSpender{
         syscall_ptr: felt*,
