@@ -5,13 +5,19 @@ from starkware.cairo.common.uint256 import Uint256, uint256_check
 from starkware.starknet.common.syscalls import (
     get_block_number,
 )
-
-from starkware.cairo.common.math import (
-    assert_le,
-    assert_not_zero
+from openzeppelin.utils.constants import (
+    TRUE, FALSE,
+)
+from openzeppelin.security.safemath import (
+    uint256_checked_add,
+    uint256_checked_sub_le,
+    uint256_eq,
+    uint256_lt,
 )
 
 from openzeppelin.token.erc721.library import (
+    ERC721_name_,
+    ERC721_symbol_,
     ERC721_name,
     ERC721_symbol,
     ERC721_balanceOf,
@@ -40,10 +46,6 @@ from openzeppelin.token.erc721_enumerable.library import (
 
 from openzeppelin.introspection.ERC165 import ERC165_supports_interface
 
-from openzeppelin.access.ownable import (
-    Ownable_initializer,
-    Ownable_only_owner
-)
 
 #
 # Storage
@@ -72,6 +74,7 @@ end
 # Constructor
 #
 
+@external
 func initialize{
         syscall_ptr : felt*, 
         pedersen_ptr : HashBuiltin*,
@@ -79,11 +82,9 @@ func initialize{
     }(
         name: felt,
         symbol: felt,
-        owner: felt,
     ):
     ERC721_initializer(name, symbol)
     ERC721_Enumerable_initializer()
-    Ownable_initializer(owner)
     return ()
 end
 
@@ -107,7 +108,7 @@ func sharesTotalSupply{
         syscall_ptr: felt*, 
         range_check_ptr
     }() -> (sharesTotalSupply: Uint256):
-    let (sharesTotalSupply: Uint256) = ERC721_sharesTotalSupply()
+    let (sharesTotalSupply: Uint256) = ERC721_sharesTotalSupply.read()
     return (sharesTotalSupply)
 end
 
@@ -209,7 +210,7 @@ func sharesBalance{
         range_check_ptr
     }(tokenId: Uint256) -> (sharesBalance: Uint256):
 
-    let (exists) = _exists(token_id)
+    let (exists) = _exists(tokenId)
     with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
         assert exists = TRUE
     end
@@ -225,7 +226,7 @@ func sharePricePurchased{
         range_check_ptr
     }(tokenId: Uint256) -> (sharePricePurchased: Uint256):
 
-    let (exists) = _exists(token_id)
+    let (exists) = _exists(tokenId)
     with_attr error_message("ERC721_Metadata: sharePricePurchased query for nonexistent token"):
         assert exists = TRUE
     end
@@ -241,7 +242,7 @@ func mintedBlock{
         range_check_ptr
     }(tokenId: Uint256) -> (mintedBlock: felt):
 
-    let (exists) = _exists(token_id)
+    let (exists) = _exists(tokenId)
     with_attr error_message("ERC721_Metadata: mintedBlock query for nonexistent token"):
         assert exists = TRUE
     end
@@ -257,27 +258,27 @@ end
 # Internal
 #
 
-
+@external
 func _setName{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
     }(_name:felt):
-    ERC721_name.write(_name)
+    ERC721_name_.write(_name)
     return ()
 end
 
-
+@external
 func _setSymbol{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
     }(_symbol:felt):
-    ERC721_symbol.write(_symbol)
+    ERC721_symbol_.write(_symbol)
     return ()
 end
 
-
+@external
 func approve{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -287,7 +288,7 @@ func approve{
     return ()
 end
 
-
+@external
 func setApprovalForAll{
         syscall_ptr: felt*, 
         pedersen_ptr: HashBuiltin*, 
@@ -297,8 +298,8 @@ func setApprovalForAll{
     return ()
 end
 
-
-func setApprovalForAll{
+@external
+func transferFrom{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
@@ -311,7 +312,7 @@ func setApprovalForAll{
     return ()
 end
 
-
+@external
 func safeTransferFrom{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -327,13 +328,14 @@ func safeTransferFrom{
     return ()
 end
 
-
+@external
 func mint{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
-    }(to: felt, tokenId: Uint256, sharesAmount: Uint256, sharePricePurchased:Uint256):
-    Ownable_only_owner()
+    }(to: felt, sharesAmount: Uint256, sharePricePurchased:Uint256):
+    alloc_locals
+    let (tokenId:Uint256) = totalSupply()
     ERC721_Enumerable_mint(to, tokenId)
 
     #set metadata 
@@ -344,21 +346,19 @@ func mint{
 
     #set the new supply
     let (supply: Uint256) = ERC721_sharesTotalSupply.read()
-    let (new_supply: Uint256) = uint256_checked_add(supply, Uint256(sharesAmount, 0))
-    ERC721_sharesTotalSupply.write(tokenId, new_supply)
+    let (new_supply: Uint256) = uint256_checked_add(supply, sharesAmount)
+    ERC721_sharesTotalSupply.write(new_supply)
     return ()
 end
 
-
+@external
 func burn{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
     }(tokenId: Uint256):
-    Ownable_only_owner()
-
-    uint256_check(token_id)
-    let (exists) = _exists(token_id)
+    uint256_check(tokenId)
+    let (exists) = _exists(tokenId)
     with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
         assert exists = TRUE
     end
@@ -378,34 +378,39 @@ func burn{
     return ()
 end
 
+@external
 func subShares{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
     }(tokenId: Uint256, sharesToSub:Uint256):
-    Ownable_only_owner()
-
-    uint256_check(token_id)
+    alloc_locals
+    uint256_check(tokenId)
     uint256_check(sharesToSub)
 
-    let (exists) = _exists(token_id)
+    let (exists) = _exists(tokenId)
+
     with_attr error_message("ERC721_Metadata: sharesBalance query for nonexistent token"):
         assert exists = TRUE
     end
 
+    let (res) = uint256_eq(sharesToSub, Uint256(0,0))
+
     with_attr error_message("ERC721_Metadata: can not sub zero shares"):
-        assert_not_zero(sharesToSub)
+        assert res = FALSE 
     end
 
-    let (shares: Uint256) = ERC721_sharesBalance.read(token_id)
+    let (shares: Uint256) = ERC721_sharesBalance.read(tokenId)
+
+    let (isLess) = uint256_lt(sharesToSub, shares)
 
     with_attr error_message("ERC721_Metadata: can not sub more than available shares"):
-        assert_le(sharesToSub, shares)
+        assert isLess = TRUE
     end
 
 
     let (new_shares) = uint256_checked_sub_le(shares, sharesToSub)
-    ERC721_sharesBalance.write(token_id, new_shares)
+    ERC721_sharesBalance.write(tokenId, new_shares)
 
     #set the new shares supply
     let (supply:Uint256) = ERC721_sharesTotalSupply.read()
