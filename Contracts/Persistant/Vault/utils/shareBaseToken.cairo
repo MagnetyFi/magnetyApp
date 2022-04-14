@@ -5,6 +5,8 @@ from starkware.cairo.common.uint256 import Uint256, uint256_check
 from starkware.starknet.common.syscalls import (
     get_block_number,
 )
+
+
 from openzeppelin.utils.constants import (
     TRUE, FALSE,
 )
@@ -255,7 +257,7 @@ end
 
 
 #
-# Internal
+# External
 #
 
 @external
@@ -312,6 +314,7 @@ func transferFrom{
     return ()
 end
 
+
 @external
 func safeTransferFrom{
         pedersen_ptr: HashBuiltin*, 
@@ -363,13 +366,14 @@ func burn{
         assert exists = TRUE
     end
 
+    let (shares:Uint256) = ERC721_sharesBalance.read(tokenId)
+
     #set the token id balance to 0
     ERC721_sharesBalance.write(tokenId, Uint256(0,0))
 
     #set the new shares supply
     let (supply:Uint256) = ERC721_sharesTotalSupply.read()
-    let (shares:Uint256) = ERC721_sharesBalance.read(tokenId)
-    let (new_supply:Uint256) = uint256_checked_add(supply, shares)
+    let (new_supply:Uint256) = uint256_checked_sub_le(supply, shares)
     ERC721_sharesTotalSupply.write(new_supply)
 
     #burn erc721
