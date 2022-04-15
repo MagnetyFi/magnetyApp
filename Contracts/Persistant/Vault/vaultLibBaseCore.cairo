@@ -4,61 +4,32 @@ from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.starknet.common.syscalls import get_caller_address
 from starkware.cairo.common.math import (
     assert_not_zero,
-    assert_not_equal,
-)
-from starkware.cairo.common.bool import (
-    TRUE,
-    FALSE,
 )
 
-from magnety.persistant.vault.utils.shareBaseToken import (
-    #getters
-    totalSupply,
-    sharesTotalSupply,
-    tokenByIndex,
-    tokenOfOwnerByIndex,
-    supportsInterface,
-    name,
-    symbol,
-    balanceOf,
-    ownerOf,
-    getApproved,
-    isApprovedForAll,
-    sharesBalance,
-    sharePricePurchased,
-    mintedBlock,
 
-    #externals
-    _setName
-    _setSymbol
-    initializer
-    approve
-    setApprovalForAll
-    safeTransferFrom
-    mint
-    burn
-    subShares
-)
+from starkware.cairo.common.uint256 import Uint256, uint256_check
+
 
 #
 # Events
 #
 
 @event
-func ComptrolleurSet(prevComptrolleur: felt, nextComptrolleur: felt):
+func ComptrolleurSet(Comptrolleur: felt):
 end
 
 @event
-func MigratorSet(prevMigrator: felt, nextMigrator: felt):
+func MigratorSet(Migrator: felt):
 end
 
 @event
-func OwnerSet(prevComptrolleur: felt, nextComptrolleur: felt):
+func OwnerSet(Owner: felt):
 end
 
 @event
 func VaultLibSet(prevVaultLib: felt, nextVaultLib: felt):
 end
+
 
 
 #
@@ -82,11 +53,27 @@ func vaultLib() -> (vaultLibAddress: felt):
 end
 
 @storage_var
-func creator() -> (creatorAddress: felt):
+func vaultFactory() -> (vaultFactoryAddress: felt):
+end
+
+
+
+
+
+@storage_var
+func trackedAssets(id: Uint256) -> (trackedAssetsAddress: felt):
 end
 
 @storage_var
-func trackedAssets() -> (trackedAssetsAddress: felt*):
+func activeExternalPositions(id: Uint256) -> (activeExternalPositionsAddress: felt):
+end
+
+@storage_var
+func trackedAssetsLength() -> (length: Uint256):
+end
+
+@storage_var
+func activeExternalPositionsLength() -> (length: Uint256):
 end
 
 @storage_var
@@ -94,46 +81,23 @@ func assetToIsTracked(assetsAddress: felt) -> (isTracked: felt):
 end
 
 @storage_var
-func accountToIsAssetManager(accountAddress: felt) -> (isAssetManager: felt):
-end
-
-@storage_var
 func externalPositionToIsActive(externalPositionAddress: felt) -> (isActive: felt):
 end
 
 @storage_var
-func activeExternalPositions() -> (activeExternalPositionsAddress: felt*):
+func accountToIsAssetManager(accountAddress: felt) -> (isAssetManager: felt):
 end
 
 @storage_var
 func nominatedOwner() -> (nominatedOwnerAddress: felt):
 end
 
-
-#
-# Getters
-#
-
-@view
-func getVaultLib{
-        syscall_ptr : felt*, 
-        pedersen_ptr : HashBuiltin*,
-        range_check_ptr
-    }() -> (vaultLib: felt):
-    let (vaultLib: felt) = vaultLib.read()
-    return (vaultLib)
+@storage_var
+func externalPositionManager() -> (externalPositionManagerAddress: felt):
 end
 
-@view
-func canMigrate{
-        syscall_ptr : felt*, 
-        pedersen_ptr : HashBuiltin*,
-        range_check_ptr
-    }(who: felt) -> (canMigrate: felt):
-    let (owner: felt) = owner.read()
-    let (migrator: felt) = migrator.read()
-    let (isAllowed: felt) = (who - owner) * (who - migrator)
-    return TRUE if isAllowed == 0 else FALSE
+@storage_var
+func positionLimit() -> (positionLimitAmount: Uint256):
 end
 
 
@@ -148,25 +112,90 @@ func init{
     }(
         _owner: felt,
         _comptrolleur: felt,
-        _fundName: felt,
-        _symbol: felt,
+        _vaultLib: felt,
+        _externalPositionManager: felt,
+        _positionLimitAmount:Uint256,
     ):
 
-    let _creator = creator.read()
+    let (migrator_:felt) = migrator.read()
+
     with_attr error_message("init: Proxy already initialized"):
-        assert creator == 0
+        assert migrator_ = 0
     end
 
     let (caller) = get_caller_address()
-    creator.write(caller)
+
+    migrator.write(caller)
+    MigratorSet.emit(caller)
+
 
     __setComptrolleur(_comptrolleur)
     __setOwner(_owner)
-    initialize(_fundName, _symbol, _comptrolleur)
 
+    setVaultLib(_vaultLib)
+    externalPositionManager.write(_externalPositionManager)
+    uint256_check(_positionLimitAmount)
+    positionLimit.write(_positionLimitAmount)
     return ()
 end
 
+#
+# Modifiers
+#
+
+func onlyVaultComptrolleur{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }():
+    let(comptrolleur_) = comptrolleur.read()
+    let(caller_) = get_caller_address()
+
+    with_attr error_message("onlyVaultComptrolleur: only callable by the comptrolleur"):
+       assert (comptrolleur_ - caller_) = 0
+    end
+    return ()
+end
+
+func onlyMigrator{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }():
+    let(migrator_) = migrator.read()
+    let(caller_) = get_caller_address()
+
+    with_attr error_message("onlyMigrator: only callable by the migrator"):
+       assert (migrator_ - caller_) = 0
+    end
+    return ()
+end
+
+
+
+#
+# Externals
+#
+
+func setVaultLib{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _nextVaultLib: felt, 
+    ):
+
+    onlyMigrator()
+
+    with_attr error_message("setVaultLib: cannot set the vaultlib to the zero address"):
+        assert_not_zero(_nextVaultLib) 
+    end
+
+    let (prevVaultLib: felt) = vaultLib.read()
+    vaultLib.write(_nextVaultLib)
+    VaultLibSet.emit(prevVaultLib, _nextVaultLib)
+    return ()
+end
 
 
 #
@@ -178,82 +207,31 @@ func __setComptrolleur{
         syscall_ptr: felt*, 
         range_check_ptr
     }(
-        _nextComptrolleur: felt, 
+        _comptrolleur: felt, 
     ):
     with_attr error_message("setComptrolleur: cannot set the comptrolleur to the zero address"):
-        assert_not_zero(_nextComptrolleur)
+        assert_not_zero(_comptrolleur)
     end
-    let (prevComptrolleur: felt) = comptrolleur.read()
-    comptrolleur.write(_nextComptrolleur)
-    ComptrolleurSet.emit(prevComptrolleur, _nextComptrolleur)
+    comptrolleur.write(_comptrolleur)
+    ComptrolleurSet.emit(_comptrolleur)
     return ()
 end
+
 
 func __setOwner{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
     }(
-        _nextOwner: felt, 
+        _owner: felt, 
     ):
-    with_attr error_message("setComptrolleur: cannot set the owner to the zero address"):
-        assert_not_zero(_nextOwner)
-    end
-
-    let (prevOwner: felt) = owner.read()
-
-    with_attr error_message("setComptrolleur: the next owner address is the current owner address"):
-        assert_not_equal(prevOwner, _nextOwner)
-    end   
-
-    owner.write(_nextOwner)
-    Owner.emit(prevOwner, _nextOwner)
-    return ()
-end
-
-func __setVaultLib{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(
-        _nextVaultLib: felt, 
-    ):
-    with_attr error_message("setVaultLib: cannot set the vaultlib to the zero address"):
-        assert_not_zero(_nextVaultLib) 
-    end
-
-    let (_creator: felt) = creator.read()
-
-    with_attr error_message("setVaultLib: Not allowded caller"):
-        assert _nextVaultLib - _creator == 0
+    with_attr error_message("_setOwner: cannot set the owner to the zero address"):
+        assert_not_zero(_owner) 
     end
 
 
-    let (prevVaultLib: felt) = vaultLib.read()
-    vaultLib.write(_nextVaultLib)
-    VaultLibSet.emit(prevVaultLib, _nextVaultLib)
-    return ()
-end
-
-func __setMigrator{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(
-        _nextMigratorAddress: felt, 
-    ):
-    with_attr error_message("__setMigrator: cannot set the migrator to the zero address"):
-        assert_not_zero(_nextMigratorAddress) 
-    end
-
-    let (previousMigrator: felt) = migrator.read()
-
-    with_attr error_message("setVaultLib: Not allowded caller"):
-        assert_not_equal(_nextMigratorAddress, previousMigrator)
-    end
-
-    migrator.write(_nextMigratorAddress)
-    MigratorSet.emit(previousMigrator, _nextMigratorAddress)
+    owner.write(_owner)
+    OwnerSet.emit(_owner)
     return ()
 end
 
