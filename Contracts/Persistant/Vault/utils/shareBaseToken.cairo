@@ -77,7 +77,7 @@ end
 #
 
 @external
-func initialize{
+func initializeShares{
         syscall_ptr : felt*, 
         pedersen_ptr : HashBuiltin*,
         range_check_ptr

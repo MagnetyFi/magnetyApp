@@ -1,7 +1,7 @@
 %lang starknet
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
-from starkware.starknet.common.syscalls import get_caller_address
+from starkware.starknet.common.syscalls import get_caller_address, get_contract_address,
 from starkware.cairo.common.math import (
     assert_not_zero,
     assert_not_equal,
@@ -24,7 +24,17 @@ from starkware.cairo.common.bool import (
     FALSE,
 )
 
-from magnety.persistant.vault.vaultLibBaseCore import (
+from starkware.cairo.common.uint256 import (
+    Uint256, 
+    uint256_check,
+    uint256_signed_lt
+)
+
+
+
+
+
+from magnety.persistant.vault.utils.shareBaseToken import (
 
     #NFT Shares getters
     totalSupply,
@@ -42,38 +52,47 @@ from magnety.persistant.vault.vaultLibBaseCore import (
     sharePricePurchased,
     mintedBlock,
 
-    #NFT Shares externals
     _setName
     _setSymbol
     approve
     setApprovalForAll
-    safeTransferFrom
+    transferFrom
     mint
     burn
     subShares
 
     #init
-    init
+    initializeShares
+)
 
-    #basic storage
+from magnety.persistant.vault.vaultLibBaseCore import (
+
     comptrolleur,
     migrator,
     owner,
     vaultLib,
-    creator,
-    trackedAssets,
-    assetToIsTracked,
-    accountToIsAssetManager,
-    externalPositionToIsActive,
-    activeExternalPositions,
-    nominatedOwner,
-    
+    externalPositionManager,
 
-    __setComptrolleur
-    __setMigrator
-    __setOwner
-    __setVaultLib
+    trackedAssets,
+    activeExternalPositions,
+    trackedAssetsLength,
+    activeExternalPositionsLength,
+    assetToIsTracked,
+    externalPositionToIsActive,
+    assetToId 
+    externalPositionToId
+
+    positionLimit,
+
+    accountToIsAssetManager,
+    nominatedOwner,
+
+    init
+    onlyVaultComptrolleur
+    onlyMigrator
+    setVaultLib
 )
+
 
 #
 # Events
@@ -127,26 +146,6 @@ end
 func OwnershipTransferred(prevOwner: felt, nextOwner:felt):
 end
 
-#
-# Storage
-#
-
-@storage_var
-func externalPositionManager() -> (externalPositionManagerAddress: felt):
-end
-
-@storage_var
-func positionLimit() -> (positionLimitAmount: Uint256):
-end
-
-@storage_var
-func trackedAssetsLength() -> (length: felt):
-end
-
-@storage_var
-func activeExternalPositionsLength() -> (length: Uint256):
-end
-
 
 #
 # Getters
@@ -180,14 +179,6 @@ func isActiveExternalPosition{
     return FALSE if isActiveExternalPosition_ == 0 else TRUE
 end
 
-func getOwner{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }() -> (owner_: felt):
-    let (owner_:felt) = owner.read()
-    return owner
-end
 
 # CALL migration manager to get the funddeployer for this proxy
 func getFundDeployer{
@@ -227,6 +218,70 @@ func getAssetBalance{
     return assetBalance_
 end
 
+@view
+func getVaultLib{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (vaultLib: felt):
+    let (vaultLib: felt) = vaultLib.read()
+    return (vaultLib)
+end
+
+@view
+func getComptrolleur{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (comptrolleur: felt):
+    let (comptrolleur: felt) = comptrolleur.read()
+    return (comptrolleur)
+end
+
+@view
+func getVaultFactory{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (vaultFactory: felt):
+    let (vaultFactory: felt) = vaultFactory.read()
+    return (vaultFactory)
+end
+
+@view
+func getOwner{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (owner: felt):
+    let (owner: felt) = owner.read()
+    return (owner)
+end
+
+@view
+func getMigrator{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (migrator: felt):
+    let (migrator: felt) = migrator.read()
+    return (migrator)
+end
+
+
+
+@view
+func canMigrate{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(who: felt) -> (canMigrate: felt):
+    let (owner: felt) = owner.read()
+    let (migrator: felt) = migrator.read()
+    let (isAllowed: felt) = (who - owner) * (who - migrator)
+    return TRUE if isAllowed == 0 else FALSE
+end
+
 
 
 #
@@ -242,31 +297,12 @@ func vaultLibInitializer{
         _symbol: felt,
         _comptrolleur: felt,
         _owner: felt,
+        _vaultLib: felt,
         _externalPositionManager: felt,
         _positionLimitAmount: Uint256,
     ):
-    init(_owner, _comptrolleur, _fundName, _symbol);
-    externalPositionManager.write(_externalPositionManager)
-    uint256_check(_positionLimitAmount)
-    positionLimitAmount.write(_positionLimitAmount)
-    return ()
-end
-
-#
-# modifier
-#
-
-func onlyVaultComptrolleur{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }():
-    let(_comptrolleur) = comptrolleur.read()
-    let(_caller) = get_caller_address()
-
-    with_attr error_message("onlyVaultOwner: only callable by the VaultOwner"):
-       assert (_comptrolleur() - _caller) == 0
-    end
+    initializeShares(_fundName, _symbol)
+    init(_owner, _comptrolleur, _vaultLib, _externalPositionManager, _positionLimitAmount);
     return ()
 end
 
@@ -283,7 +319,6 @@ func setName{
         _nextName: felt, 
     ):
     onlyVaultComptrolleur()
-
     _setName(_nextName)
     NameSet.emit(_nextName)
     return ()
@@ -297,7 +332,6 @@ func setSymbol{
         _nextSymbol: felt, 
     ):
     onlyVaultComptrolleur()
-
     _setSymbol(_nextSymbol)
     SymbolSet.emit(_nextSymbol)
     return ()
@@ -370,15 +404,6 @@ func setNominatedOwner{
     return ()
 end
 
-func setMigrator{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(_nextMigrator: felt):
-    onlyVaultComptrolleur()
-    __setMigrator(_nextMigrator)
-    return ()
-end
 
 func removeNominatedOwner{
         pedersen_ptr: HashBuiltin*, 
@@ -404,7 +429,7 @@ func removeNominatedOwner{
     return ()
 end
 
-func addAssetManager{
+func removeAssetManager{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
@@ -462,6 +487,35 @@ func burnShares{
     end
 end
 
+func callOnContract{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _contract:felt,
+        
+    ):
+    let(_comptrolleur:felt) = comptrolleur.read()
+    let(_caller:felt) = get_caller_address()
+    let(_shareowner:felt)  = ownerOf(_tokenId)
+
+    with_attr error_message("burnShares: approve caller is not owner nor approved for all"):
+        assert (_comptrolleur - _caller) * (_shareowner - _caller) == 0
+    end
+
+    let(_sharesAmount:felt) = sharesBalance(_tokenId)
+
+    if _sharesAmount == _amount:
+        burn(token_id)
+        return ()
+    else:
+        subShares(_tokenId, _amount)
+        return ()
+    end
+end
+
+
+
 func mintShares{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -489,7 +543,18 @@ func withdrawAssetTo{
     __withdrawAssetTo(_asset, _target, _amount)
 end
 
-
+func receiveValidatedVaultAction{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _asset: felt,
+        _target:felt,
+        _amount:Uint256,
+    ):
+    onlyVaultComptrolleur()
+    __withdrawAssetTo(_asset, _target, _amount)
+end
 
 
 
@@ -499,96 +564,106 @@ end
 #
 
 
-## see array manipulation
-# func __addTrackedAsset{
-#         syscall_ptr: felt*,
-#         pedersen_ptr: HashBuiltin*,
-#         range_check_ptr
-#     }(_asset: felt) -> (externalPositionManager_: felt):
 
-#     let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
-#     with_attr error_message("__addTrackedAsset: asset already tracked"):
-#         assert isTrackedAsset_ == FALSE
-#     end
-#     __validatePositionsLimit()
+func __addTrackedAsset{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_asset: felt):
 
-#     assetToIsTracked.write(_asset,TRUE)
-#     let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
-#     alloc_locals
-#     let(trackedAssets_:felt*) = trackedAssets.read()
-#     trackedAssets_[currentTrackedAssetsLength] = _asset
-#     trackedAssets.write(trackedAssets_)
-#     let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
-#     trackedAssetsLength.write(newTrackedAssetsLength)
-#     TrackedAssetAdded.emit(_asset)
-# end
+    let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
+    with_attr error_message("__addTrackedAsset: asset already tracked"):
+        assert isTrackedAsset_ == FALSE
+    end
+    __validatePositionsLimit()
+    let (currentTrackedAssetsLength: Uint256) = trackedAssetsLength.read()
+    assetToIsTracked.write(_asset,TRUE)
+    trackedAssets.write(currentTrackedAssetsLength,_asset)
+    assetToId.write(_asset,currentTrackedAssetsLength)
+    let (newTrackedAssetsLength_: Uint256) = uint256_checked_add(currentTrackedAssetsLength,Uint256(1,0))
+    trackedAssetsLength.write(newTrackedAssetsLength_)
+    TrackedAssetAdded.emit(_asset)
+end
 
-# func __removeTrackedAsset{
-#         syscall_ptr: felt*,
-#         pedersen_ptr: HashBuiltin*,
-#         range_check_ptr
-#     }(_asset: felt) -> (externalPositionManager_: felt):
+func __removeTrackedAsset{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_asset: felt):
 
-#     let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
-#     with_attr error_message("__removeTrackedAsset: asset not tracked"):
-#         assert isTrackedAsset_ == TRUE
-#     end
+    let (isTrackedAsset_:felt) = isTrackedAsset(_asset)
+    with_attr error_message("__removeTrackedAsset: asset not tracked"):
+        assert isTrackedAsset_ == TRUE
+    end
+    assetToIsTracked.write(_asset,FALSE)
+    let (currentTrackedAssetsLength_: Uint256) = trackedAssetsLength.read()
+    let (id:Uint256) = assetToId.read(_asset)
+    let (res:Uint256) = uint256_checked_sub_le(currentTrackedAssetsLength_, id)
+    let (newTrackedAssetsLength_: Uint256) = uint256_checked_sub_le(currentTrackedAssetsLength_,Uint256(1,0))
+    if res == 1 : 
+    trackedAssets.write(id, 0)
+    end
+    else :
+    let (lastAssetId:Uint256) = newTrackedAssetsLength_
+    let (lastAsset:felt) = trackedAssets.read(lastAssetId)
+    trackedAssets.write(lastAssetId, 0)
+    trackedAssets.write(id, lastAsset)
+    assetToId(lastAsset).write(id)
+    end
+    trackedAssetsLength.write(newTrackedAssetsLength_)
+    TrackedAssetRemoved.emit(_asset)
+end
 
-#     assetToIsTracked.write(_asset,TRUE)
-#     let (currentTrackedAssetsLength:felt) = trackedAssetsLength.read() 
-#     alloc_locals
-#     let(trackedAssets_:felt*) = trackedAssets.read()
-#     trackedAssets_[currentTrackedAssetsLength] = _asset
-#     trackedAssets.write(trackedAssets_)
-#     let (newTrackedAssetsLength:felt) = uint256_checked_add(currentTrackedAssetsLength, Uint256(1,0))
-#     trackedAssetsLength.write(newTrackedAssetsLength)
-#     TrackedAssetRemoved.emit(_asset)
-# end
+func __addExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_externalPosition: felt):
 
-# func __addExternalPosition{
-#         syscall_ptr: felt*,
-#         pedersen_ptr: HashBuiltin*,
-#         range_check_ptr
-#     }(_externalPosition: felt):
-#     let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+    let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+    with_attr error_message("_addExternalPosition: externalPosition already active":
+        assert isActiveExternalPosition_ == FALSE
+    end
+    __validatePositionsLimit()
+    let (currentActiveExternalPositionsLength_: Uint256) = activeExternalPositionsLength.read()
+    isActiveExternalPosition.write(_externalPosition,TRUE)
+    activeExternalPositions.write(currentActiveExternalPositionsLength_, _externalPosition)
+    externalPositionToId.write(_externalPosition,currentActiveExternalPositionsLength_)
+    let (newActiveExternalPositionsLength_: Uint256) = uint256_checked_add(currentActiveExternalPositionsLength_,Uint256(1,0))
+    activeExternalPositionsLength.write(newActiveExternalPositionsLength_)
+    ExternalPositionAdded.emit(_externalPosition)
+end
 
-#     with_attr error_message("__addExternalPosition: externalPosition already active"):
-#         assert isActiveExternalPosition_ == FALSE
-#     end
-#     __validatePositionsLimit()
+func __removeExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_externalPosition: felt):
+    let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
 
-#     externalPositionToIsActive.write(_externalPosition,TRUE)
-#     let (currentActiveExternalPositionsLength:felt) = activeExternalPositionsLength.read() 
-#     alloc_locals
-#     let(activeExternalPositions_:felt*) = activeExternalPositions.read()
-#     activeExternalPositions_[currentActiveExternalPositionsLength] = _externalPosition
-#     activeExternalPositions.write(activeExternalPositions_)
-#     let (newActiveExternalPositionsLength:felt) = uint256_checked_add(currentActiveExternalPositionsLength, Uint256(1,0))
-#     activeExternalPositionsLength.write(newActiveExternalPositionsLength)
-#     ExternalPositionAdded.emit(_asset)
-# end
+    with_attr error_message("__removeExternalPosition: externalPosition not active"):
+        assert isActiveExternalPosition_ == TRUE
+    end
 
-# func __removeExternalPosition{
-#         syscall_ptr: felt*,
-#         pedersen_ptr: HashBuiltin*,
-#         range_check_ptr
-#     }(_externalPosition: felt):
-#     let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+    externalPositionToIsActive.write(_externalPosition,FALSE)
 
-#     with_attr error_message("__removeExternalPosition: externalPosition not active"):
-#         assert isActiveExternalPosition_ == TRUE
-#     end
-
-#     externalPositionToIsActive.write(_externalPosition,TRUE)
-#     let (currentActiveExternalPositionsLength:felt) = activeExternalPositionsLength.read() 
-#     alloc_locals
-#     let(activeExternalPositions_:felt*) = activeExternalPositions.read()
-#     activeExternalPositions_[currentActiveExternalPositionsLength] = _externalPosition
-#     activeExternalPositions.write(activeExternalPositions_)
-#     let (newActiveExternalPositionsLength:felt) = uint256_checked_add(currentActiveExternalPositionsLength, Uint256(1,0))
-#     activeExternalPositionsLength.write(newActiveExternalPositionsLength)
-#     ExternalPositionRemoved.emit(_externalPosition)
-# end
+    let (currentActiveExternalPositionsLength_: Uint256) = activeExternalPositionsLength.read()
+    let (id:Uint256) = externalPositionToId.read(_externalPosition)
+    let (res:Uint256) = uint256_checked_sub_le(currentActiveExternalPositionsLength_, id)
+    let (newActiveExternalPositionsLength_: Uint256) = uint256_checked_sub_le(currentTrackedAssetsLength,Uint256(1,0))
+    if res == 1 : 
+    activeExternalPositions.write(id, 0)
+    end
+    else :
+    let (lastExternalPositionId:Uint256) = newActiveExternalPositionsLength_
+    let (lastExternalPosition:felt) = activeExternalPositions.read(lastExternalPositionId)
+    activeExternalPositions.write(lastExternalPositionId, 0)
+    activeExternalPositions.write(id, lastAsset)
+    externalPositionToId(lastExternalPosition).write(id)
+    end
+    activeExternalPositionsLength.write(newActiveExternalPositionsLength_)
+    ExternalPositionRemoved.emit(_externalPosition)
+end
 
 
 
@@ -600,8 +675,21 @@ func __approveAssetSpender{
     _asset: felt,
     _target: felt,
     _amount: Uint256,
-    )
+    ):
 
+    let (vaultProxyAddress_: felt) = get_contract_address()
+    let (allowanceAmount_ : Uint256) = IERC20.allowance(contract_address = _asset, ownner = vaultProxyAddress_, spender = _target)
+    let (existingAllowance) = uint256_signed_lt(Uint256(0,0),allowanceAmount_)
+    if existingAllowance == 1 :
+        let (success_) = IERC20.approve(contract_address = _asset, spender = _target, amount = 0)  
+        with_attr error_message("__approveAssetSpender: Approve didn't succeed"):
+            assert_not_zero(succes_)
+        end
+    end
+    let (succes_) = let (success) = IERC20.approve(contract_address = _asset, spender = _target, amount = _amount)  
+    with_attr error_message("__approveAssetSpender: Approve didn't succeed"):
+            assert_not_zero(succes_)
+    end
 end
 
 
