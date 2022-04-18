@@ -7,12 +7,17 @@ from starkware.cairo.common.math import (
     assert_not_equal,
 )
 
+from starkware.cairo.common.memcpy import memcpy
+
 from openzeppelin.token.erc20.interfaces.IERC20 import (
     balanceOf,
     allowance,
     transfer,
     transferFrom,
     approve,
+)
+from warp.src.warp.cairo-src.evm.utils import (
+    felt_to_uint256,
 )
 
 from starkware.cairo.common.find_element import (
@@ -30,7 +35,13 @@ from starkware.cairo.common.uint256 import (
     uint256_signed_lt
 )
 
+from IVault import (
+    VaultAction
+)
 
+from IExternalPosition import (
+    receiveCallFromVault
+)
 
 
 
@@ -56,7 +67,7 @@ from magnety.persistant.vault.utils.shareBaseToken import (
     _setSymbol
     approve
     setApprovalForAll
-    transferFrom
+    transferSharesFrom
     mint
     burn
     subShares
@@ -530,6 +541,19 @@ func mintShares{
    mint(_newSharesholder, _tokenId, _amount, _sharePricePurchased)
 end
 
+func transferShares{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _from: felt,
+        _to:felt,
+        _tokenId:Uint256,
+    ):
+    onlyVaultComptrolleur()
+    transferSharesFrom(_from, _to, _tokenId)
+end
+
 func withdrawAssetTo{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
@@ -548,22 +572,219 @@ func receiveValidatedVaultAction{
         syscall_ptr: felt*, 
         range_check_ptr
     }(
-        _asset: felt,
-        _target:felt,
-        _amount:Uint256,
+        _action: VaultAction,
+        _actionData:felt*,
+        _actionDataLength:felt,
     ):
     onlyVaultComptrolleur()
-    __withdrawAssetTo(_asset, _target, _amount)
+    if _action == VaultAction.AddExternalPosition :
+         __executeVaultActionAddExternalPosition(_actionData);
+    end
+    else if _action == VaultAction.AddTrackedAsset : 
+         __executeVaultActionAddTrackedAsset(_actionData);
+    end
+    else if _action == VaultAction.ApproveAssetSpender:
+        __executeVaultActionApproveAssetSpender(_actionData);
+    end
+    else if _action == VaultAction.BurnShares:
+        __executeVaultActionBurnShares(_actionData);
+    end
+    else if _action == VaultAction.CallOnExternalPosition:
+        __executeVaultActionCallOnExternalPosition(_actionData);
+    end
+    else if _action == VaultAction.MintShares:
+        __executeVaultActionMintShares(_actionData);
+    end
+    else if _action == VaultAction.RemoveExternalPosition:
+        __executeVaultActionRemoveExternalPosition(_actionData);
+    end
+    else if action == VaultAction.RemoveTrackedAsset:
+        __executeVaultActionRemoveTrackedAsset(_actionData);
+    end
+    else if action == VaultAction.TransferShares:
+        __executeVaultActionTransferShares(_actionData);
+    end
+    else if action == VaultAction.WithdrawAssetTo:
+        __executeVaultActionWithdrawAssetTo(_actionData);
+    end
+
 end
 
 
 
 
 #
-# internal
+# VAULT ACTION DISPATCH
 #
 
+func __executeVaultActionAddExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (address_:felt) = _actionData[0]
+    __addExternalPosition(address_)
+end
 
+func __executeVaultActionAddTrackedAsset{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (address_:felt) = _actionData[0]
+    __addTrackedAsset(address_)
+end
+
+func __executeVaultActionApproveAssetSpender{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (address_:felt) = _actionData[0]
+    let (target_:felt) = _actionData[1]
+    let (amount_:Uint256) = felt_to_uint256_(actionData[2])
+    __approveAssetSpender(address_, target_, amount_)
+end
+
+func __executeVaultActionBurnShares{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (tokenId_:felt) = _actionData[0]
+    let (amount_:Uint256) = felt_to_uint256_(_actionData[1])
+    burnShares(amount_, tokenId_)
+end
+
+func __executeVaultActionCallOnExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (externalPosition_:felt) = _actionData[0]
+    #CallOnExternalPositionActionData
+    let (callOnExternalPositionActionDataLength_:felt) = (_actionData[1])
+    let (local callOnExternalPositionActionData_ : felt*) = alloc()
+    memcpy(callOnExternalPositionActionData_, _actionData + 2, callOnExternalPositionActionDataLength_)
+    #AssetToTransfer
+    let (currentIndex_:felt) = 2 + callOnExternalPositionActionDataLength_
+    let (assetsToTransferLength_:felt) = _actionData[currentIndex_]
+    let (local assetsToTransfer_: felt*) = alloc()
+    memcpy(assetsToTransfer_, _actionData + currentIndex_ + 1, assetsToTransferLength_)
+    let (local amountsToTransferFelt_: felt*) = alloc()
+    memcpy(amountsToTransferFelt_, _actionData + currentIndex_ + 1 + assetsToTransferLength_, assetsToTransferLength_)
+    let (local amountsToTransfer_: felt*) = alloc()
+    __memcpyUint256(amountsToTransfer_, amountsToTransferFelt_, assetsToTransferLength_)
+    let (local assetsToReceive_: felt*) = alloc()
+    let (currentIndex2_: felt) = _actionData + currentIndex_ + 1 + 2*assetsToTransferLength_
+    let (assetsToReceiveLength_: felt) = _actionData[currentIndex2_]
+    memcpy(assetsToReceive_, currentIndex2_ + 1, assetsToReceiveLength_)
+
+    __callOnExternalPosition(
+        externalPosition_,
+        callOnExternalPositionActionDataLength_,
+        callOnExternalPositionActionData_,
+        assetsToTransferLength_,
+        assetsToTransfer_,
+        amountsToTransfer_,
+        assetsToReceiveLength_,
+        assetsToReceive_)
+end
+
+# same as memcpy but to copy and transform to Uint256
+func __memcpyUint256{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(dst: Uint256*, src: felt*, len: felt):
+    struct LoopFrame:
+        member dst : felt*
+        member src : felt*
+    end
+
+    if len == 0:
+        return ()
+    end
+
+    %{ vm_enter_scope({'n': ids.len}) %}
+    tempvar frame = LoopFrame(dst=dst, src=src)
+
+    loop:
+    let frame = [cast(ap - LoopFrame.SIZE, LoopFrame*)]
+    assert [frame.dst] = felt_to_uint256([frame.src])
+
+    let continue_copying = [ap]
+    # Reserve space for continue_copying.
+    let next_frame = cast(ap + 1, LoopFrame*)
+    next_frame.dst = frame.dst + 1; ap++
+    next_frame.src = frame.src + 1; ap++
+    %{
+        n -= 1
+        ids.continue_copying = 1 if n > 0 else 0
+    %}
+    static_assert next_frame + LoopFrame.SIZE == ap + 1
+    jmp loop if continue_copying != 0; ap++
+    # Assert that the loop executed len times.
+    len = cast(next_frame.src, felt) - cast(src, felt)
+
+    %{ vm_exit_scope() %}
+    return ()
+end
+
+func __executeVaultActionMintShares{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (newSharesholder_:felt) = _actionData[0]
+    let (amount_:Uint256) = felt_to_uint256_(_actionData[1])
+    let (sharePricePurchased_:Uint256) = felt_to_uint256_(_actionData[2])
+    mintShares(amount_, newSharesholder_, sharePricePurchased_)
+end
+
+func __executeVaultActionRemoveExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (address_:felt) = _actionData[0]
+    __removeExternalPosition(address_)
+end
+
+func __executeVaultActionRemoveTrackedAsset{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (address_:felt) = _actionData[0]
+    __removeTrackedAsset(address_)
+end
+
+func __executeVaultActionTransferShares{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (from_:felt) = _actionData[0]
+    let (to_:felt) = _actionData[1]
+    let (tokenId_:Uint256) = felt_to_uint256_(_actionData[2])
+    transferSharesFrom(_from, _to, _tokenId)
+end
+
+func __executeVaultActionWithdrawAssetTo{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_actionData: felt*):
+    let (asset_:felt) = _actionData[0]
+    let (target_:felt) = _actionData[1]
+    let (amount_:Uint256) = felt_to_uint256_(_actionData[2])
+    __withdrawAssetTo(asset_, target_, amount_)
+end
+
+#
+# VAULT ACTION 
+#
 
 func __addTrackedAsset{
         syscall_ptr: felt*,
@@ -663,6 +884,30 @@ func __removeExternalPosition{
     end
     activeExternalPositionsLength.write(newActiveExternalPositionsLength_)
     ExternalPositionRemoved.emit(_externalPosition)
+end
+
+func __callOnExternalPosition{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(_externalPosition: felt,
+    _callOnExternalPositionActionDataLength: felt,
+    _callOnExternalPositionActionData: felt*,
+    _assetsToTransferLength: felt,
+    _assetsToTransfer: felt*,
+    _amountsToTransfer: Uint256*,
+    _assetsToReceiveLength: felt,
+    _assetsToReceive_: felt*):
+
+    let (isActiveExternalPosition_:felt) = isActiveExternalPosition(_externalPosition)
+
+    with_attr error_message("__callOnExternalPosition: externalPosition not active"):
+        assert isActiveExternalPosition_ == TRUE
+    end
+    # transfer all asset +
+    # track new asset to receive
+
+    IExternalPosition.receiveCallFromVault(contract_address = _externalPosition, _actionData = _callOnExternalPositionActionData)
 end
 
 
