@@ -52,7 +52,9 @@ end
 func vaultLib() -> (vaultLibAddress: felt):
 end
 
-
+@storage_var
+func vaultFactory() -> (vaultFactoryAddress: felt):
+end
 
 
 
@@ -63,15 +65,15 @@ func trackedAssets(id: Uint256) -> (trackedAssetsAddress: felt):
 end
 
 @storage_var
-func assetToId(trackedAssetsAddress: felt) -> (id: Uint256):
+func assetToId(asset: felt) -> (id: Uint256):
+end
+
+@storage_var
+func externalPositionToId(externalPosition: felt) -> (id: Uint256):
 end
 
 @storage_var
 func activeExternalPositions(id: Uint256) -> (activeExternalPositionsAddress: felt):
-end
-
-@storage_var
-func externalPositionToId(externalPositionAddress: felt) -> (id: Uint256):
 end
 
 @storage_var

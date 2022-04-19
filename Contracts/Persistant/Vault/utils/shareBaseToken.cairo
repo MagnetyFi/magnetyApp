@@ -301,7 +301,7 @@ func setApprovalForAll{
 end
 
 @external
-func transferFrom{
+func transferSharesFrom{
         pedersen_ptr: HashBuiltin*, 
         syscall_ptr: felt*, 
         range_check_ptr
