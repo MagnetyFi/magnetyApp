@@ -33,15 +33,15 @@ end
 
 
 @storage_var
-func trackedAssets(id: Uint256) -> (trackedAssetsAddress: felt):
+func trackedAssets(id: felt) -> (trackedAssetsAddress: felt):
 end
 
 @storage_var
-func assetToId(asset: felt) -> (id: Uint256):
+func assetToId(asset: felt) -> (id: felt):
 end
 
 @storage_var
-func trackedAssetsLength() -> (length: Uint256):
+func trackedAssetsLength() -> (length: felt):
 end
 
 @storage_var
