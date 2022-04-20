@@ -31,6 +31,9 @@ namespace IVault:
     func getAllowance(owner: felt, spender: felt) -> (remaining: Uint256):
     end
 
+    func isAssetManager(who: felt) -> (isAssetManager_: felt):
+    end
+
     func transfer(recipient: felt, amount: Uint256) -> (success: felt):
     end
 

@@ -197,6 +197,45 @@ func isTrackedAsset{
         return(TRUE)
 end
 
+func getTrackedAssets{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }() -> (trackedAssets_len_:Uint256, trackedAssets_: felt*):
+    alloc_locals
+    let (trackedAssets_len_:Uint256) = trackedAssetsLength.read()
+    let (local trackedAssets_ : felt*) = alloc()
+    completeAssetTab(trackedAssets_len_, trackedAssets_, 0)
+    return(trackedAssets_len_, trackedAssets_)
+end
+
+func completeAssetTab{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(trackedAssets_len_:Uint256, trackedAssets_:felt*, index:felt) -> ():
+    let (isEmpty) = uint256_eq(trackedAssets_len_, Uint256(0,0))
+    if isEmpty == 1:
+        return ()
+    end
+    let (indexUint256_:Uint256) = felt_to_uint256(index)
+    let (trackedAsset_:felt) = trackedAssets.read(indexUint256_)
+
+    assert [trackedAssets_ + index] = trackedAsset_
+    
+
+    let new_index_:felt = index + 1
+    let (new_trackedAssets_len_:Uint256) = uint256_checked_sub_le(trackedAssets_len_, Uint256(1,0))
+
+    return completeAssetTab(
+        trackedAssets_len_=new_trackedAssets_len_,
+        trackedAssets_= trackedAssets_,
+        index=new_index_,
+    )
+end
+
+
+
 func isActiveExternalPosition{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
