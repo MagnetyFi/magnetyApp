@@ -320,10 +320,57 @@ func constructor{
     return ()
 end
 
+@external
+func receiveValidatedVaultAction{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }(
+        _action: felt,
+        _actionData_len:felt,
+        _actionData:felt*,
+    ):
+    alloc_locals
+    onlyVaultComptrolleur()
+    if  _action == VaultAction.AddTrackedAsset : 
+        __executeVaultActionAddTrackedAsset(_actionData)
+        return ()
+        else:
+            if _action == VaultAction.BurnShares:
+                __executeVaultActionBurnShares(_actionData)
+                return ()
+                else:
+                    if _action == VaultAction.MintShares:
+                        __executeVaultActionMintShares(_actionData)
+                        return ()
+                        else:
+                            if _action == VaultAction.RemoveTrackedAsset:
+                                __executeVaultActionRemoveTrackedAsset(_actionData)
+                                return ()
+                                else:
+                                    if _action == VaultAction.TransferShares:
+                                        __executeVaultActionTransferShares(_actionData)
+                                        return ()
+                                        else:
+                                            if _action == VaultAction.WithdrawAssetTo:
+                                                __executeVaultActionWithdrawAssetTo(_actionData)
+                                                return ()
+                                            end
+                                        end
+                                end
+                        end
+                end
+        end
+    return ()
+end
+
+
 
 #
-# externals
+# internal
 #
+
+
 
 
 
@@ -386,48 +433,6 @@ end
 
 
 
-func receiveValidatedVaultAction{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(
-        _action: felt,
-        _actionData_len:felt,
-        _actionData:felt*,
-    ):
-    alloc_locals
-    onlyVaultComptrolleur()
-    if  _action == VaultAction.AddTrackedAsset : 
-        __executeVaultActionAddTrackedAsset(_actionData)
-        return ()
-        else:
-            if _action == VaultAction.BurnShares:
-                __executeVaultActionBurnShares(_actionData)
-                return ()
-                else:
-                    if _action == VaultAction.MintShares:
-                        __executeVaultActionMintShares(_actionData)
-                        return ()
-                        else:
-                            if _action == VaultAction.RemoveTrackedAsset:
-                                __executeVaultActionRemoveTrackedAsset(_actionData)
-                                return ()
-                                else:
-                                    if _action == VaultAction.TransferShares:
-                                        __executeVaultActionTransferShares(_actionData)
-                                        return ()
-                                        else:
-                                            if _action == VaultAction.WithdrawAssetTo:
-                                                __executeVaultActionWithdrawAssetTo(_actionData)
-                                                return ()
-                                            end
-                                        end
-                                end
-                        end
-                end
-        end
-    return ()
-end
 
 
 
