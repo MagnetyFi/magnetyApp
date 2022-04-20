@@ -55,23 +55,15 @@ from shareBaseToken import (
     #NFT Shares getters
     totalSupply,
     sharesTotalSupply,
-    tokenByIndex,
-    tokenOfOwnerByIndex,
-    supportsInterface,
     name,
     symbol,
     balanceOf,
     ownerOf,
-    getApproved,
-    isApprovedForAll,
     sharesBalance,
     sharePricePurchased,
     mintedBlock,
 
-    _setName,
-    _setSymbol,
-    approve,
-    setApprovalForAll,
+    #NFT Shares externals
     transferSharesFrom,
     mint,
     burn,
@@ -113,20 +105,20 @@ end
 func TrackedAssetRemoved(assetAddress: felt):
 end
 
-@event
-func NameSet(name: felt):
-end
+# @event
+# func NameSet(name: felt):
+# end
 
-@event
-func SymbolSet(symbol: felt):
-end
+# @event
+# func SymbolSet(symbol: felt):
+# end
 
 const FALSE = 0
 const TRUE = 1
 
 
 #
-# Getters
+# Getters 
 #
 
 
@@ -210,6 +202,106 @@ func getComptrolleur{
 end
 
 #
+# NFT Getters 
+#
+
+@view
+func getTotalSupply{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }() -> (totalSupply: Uint256):
+    let (totalSupply: Uint256) = totalSupply()
+    return (totalSupply)
+end
+
+@view
+func getSharesTotalSupply{
+        pedersen_ptr: HashBuiltin*, 
+        syscall_ptr: felt*, 
+        range_check_ptr
+    }() -> (sharesTotalSupply: Uint256):
+    let (sharesTotalSupply: Uint256) = sharesTotalSupply()
+    return (sharesTotalSupply)
+end
+
+
+
+
+@view
+func getName{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (name: felt):
+    let (name) = name()
+    return (name)
+end
+
+@view
+func getSymbol{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (symbol: felt):
+    let (symbol) = symbol()
+    return (symbol)
+end
+
+@view
+func getBalanceOf{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(owner: felt) -> (balance: Uint256):
+    let (balance: Uint256) = balanceOf(owner)
+    return (balance)
+end
+
+
+@view
+func getOwnerOf{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(tokenId: Uint256) -> (owner: felt):
+    let (owner: felt) = ownerOf(tokenId)
+    return (owner)
+end
+
+
+
+@view
+func getSharesBalance{
+        syscall_ptr : felt*, 
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(tokenId: Uint256) -> (sharesBalance: Uint256):
+    let (sharesBalance: Uint256) = sharesBalance(tokenId)
+    return (sharesBalance)
+end
+
+@view
+func getSharePricePurchased{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*, 
+        range_check_ptr
+    }(tokenId: Uint256) -> (sharePricePurchased: Uint256):
+    let (sharePricePurchased: Uint256) = sharePricePurchased(tokenId)
+    return (sharePricePurchased)
+end
+
+@view
+func getMintedBlock{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*, 
+        range_check_ptr
+    }(tokenId: Uint256) -> (mintedBlock: felt):
+    let (mintedBlock: felt) = mintedBlock(tokenId)
+    return (mintedBlock)
+end
+
+#
 # Constructor
 #
 @constructor
@@ -233,31 +325,6 @@ end
 # externals
 #
 
-func setName{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(
-        _nextName: felt, 
-    ):
-    onlyVaultComptrolleur()
-    _setName(_nextName)
-    NameSet.emit(_nextName)
-    return ()
-end
-
-func setSymbol{
-        pedersen_ptr: HashBuiltin*, 
-        syscall_ptr: felt*, 
-        range_check_ptr
-    }(
-        _nextSymbol: felt, 
-    ):
-    onlyVaultComptrolleur()
-    _setSymbol(_nextSymbol)
-    SymbolSet.emit(_nextSymbol)
-    return ()
-end
 
 
 func addTrackedAsset{
